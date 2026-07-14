@@ -21,7 +21,7 @@
       </svg>
       <div class="brand-text">
         <div class="name">RINZ WAYPOINT</div>
-        <div class="tag">AI Career</div>
+        <div class="tag">AI Career Path</div>
       </div>
     </div>
     <div class="readiness-chip">READINESS <b id="readinessPct">0%</b></div>
@@ -37,30 +37,33 @@
   <section class="screen active" id="screen-intake">
     <div class="eyebrow">Step 01 - Survey</div>
     <h1 class="screen-title">Let's draft your starting position</h1>
-    <p class="screen-sub">Paste your resume, tell me what you're drawn to, and name the role you're aiming for. I'll survey the terrain before we draft a route.</p>
+    <p class="screen-sub">Tell me what you're drawn to and name the role you're aiming for. I'll survey the terrain before we draft a route.</p>
 
     <div class="card">
       <div class="field">
-        <label for="resumeInput">Resume (paste as text)</label>
-        <textarea id="resumeInput" placeholder="Paste your resume content here — experience, skills, tools you've used...">Junior analyst with 2 years experience in Excel, SQL, and basic Python scripting for data cleaning. Built a few dashboards in Tableau. Comfortable with git and writing internal reports. Looking to move into a more technical role.</textarea>
-      </div>
+        <label for="resumeInput">Resume (write as text)</label>
+            <textarea id="resumeInput" placeholder="Paste your resume content here (i.e experience, skills, tools you've learned)"></textarea>
+        </div>
+
       <div class="row2">
         <div class="field">
           <label for="interestsInput">Interests</label>
           <div class="tag-input-box" id="tagBox">
-            <input type="text" id="interestsInput" placeholder="Type and press Enter...">
+            <input type="text" id="interestsInput" placeholder="Type and press Enter">
           </div>
-          <div class="hint">e.g. machine learning, storytelling with data, mentoring</div>
+          <div class="hint">e.g. machine learning, web design, databases</div>
         </div>
+
         <div class="field">
           <label for="targetInput">Target career</label>
-          <input type="text" id="targetInput" placeholder="e.g. Data Scientist" value="Data Scientist">
-          <div class="hint">Try: Data Scientist, Product Manager, Software Engineer, UX Designer</div>
+          <input type="text" id="targetInput" placeholder="e.g. Marketing Salesman">
+          <div class="hint">Example: Data Scientist, Product Manager, Software Engineer, UX Designer</div>
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn" id="analyzeBtn">Survey My Skills →</button>
+        <button class="btn" id="analyzeBtn">Survey My Skills</button>
       </div>
+    </div>
     </div>
   </section>
 

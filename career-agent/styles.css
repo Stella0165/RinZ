@@ -1,0 +1,32 @@
+:root{
+  --ink:#0E2A47;
+  --ink-deep:#081B30;
+  --blueprint:#7EC8E3;
+  --blueprint-dim:rgba(126,200,227,0.18);
+  --paper:#F4F7FA;
+  --amber:#E8A33D;
+  --green:#4CAF7D;
+  --grid-line:rgba(126,200,227,0.12);
+  --grid-line-strong:rgba(126,200,227,0.22);
+  --radius:2px;
+  --font-display:'Space Grotesk', sans-serif;
+  --font-body:'Inter', sans-serif;
+  --font-mono:'IBM Plex Mono', monospace;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;}
+body{
+  background:
+    linear-gradient(var(--grid-line) 1px, transparent 1px) 0 0/40px 40px,
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px) 0 0/40px 40px,
+    radial-gradient(ellipse at top left, var(--ink) 0%, var(--ink-deep) 70%);
+  background-color:var(--ink-deep);
+  color:var(--paper);
+  font-family:var(--font-body);
+  min-height:100vh;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--amber); color:var(--ink-deep);}
+a{color:inherit;}
+
+.wrap{max-width:1040px;margin:0 auto;padding:28px 24px 80px;}

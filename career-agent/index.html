@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waypoint - AI Career Draftsman</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 34 34" fill="none">
+        <circle cx="17" cy="17" r="15.5" stroke="#7EC8E3" stroke-width="1.2" stroke-dasharray="2 3"/>
+        <circle cx="17" cy="17" r="9" stroke="#E8A33D" stroke-width="1.4"/>
+        <path d="M17 2 V8 M17 26 V32 M2 17 H8 M26 17 H32" stroke="#7EC8E3" stroke-width="1.2"/>
+        <circle cx="17" cy="17" r="2" fill="#E8A33D"/>
+      </svg>
+      <div class="brand-text">
+        <div class="name">RINZ WAYPOINT</div>
+        <div class="tag">AI Career</div>
+      </div>
+    </div>
+    <div class="readiness-chip">READINESS <b id="readinessPct">0%</b></div>
+  </div>
+
+  <div class="stepper" id="stepper">
+    <div class="step active" data-screen="intake"><span class="n">01</span>Intake</div>
+    <div class="step locked" data-screen="skillmap"><span class="n">02</span>Skill Map</div>
+    <div class="step locked" data-screen="roadmap"><span class="n">03</span>Roadmap</div>
+    <div class="step locked" data-screen="interview"><span class="n">04</span>Mock Interview</div>
+  </div>
+
+  <section class="screen active" id="screen-intake">
+    <div class="eyebrow">Step 01 - Survey</div>
+    <h1 class="screen-title">Let's draft your starting position</h1>
+    <p class="screen-sub">Paste your resume, tell me what you're drawn to, and name the role you're aiming for. I'll survey the terrain before we draft a route.</p>
+
+    <div class="card">
+      <div class="field">
+        <label for="resumeInput">Resume (paste as text)</label>
+        <textarea id="resumeInput" placeholder="Paste your resume content here — experience, skills, tools you've used...">Junior analyst with 2 years experience in Excel, SQL, and basic Python scripting for data cleaning. Built a few dashboards in Tableau. Comfortable with git and writing internal reports. Looking to move into a more technical role.</textarea>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="interestsInput">Interests</label>
+          <div class="tag-input-box" id="tagBox">
+            <input type="text" id="interestsInput" placeholder="Type and press Enter...">
+          </div>
+          <div class="hint">e.g. machine learning, storytelling with data, mentoring</div>
+        </div>
+        <div class="field">
+          <label for="targetInput">Target career</label>
+          <input type="text" id="targetInput" placeholder="e.g. Data Scientist" value="Data Scientist">
+          <div class="hint">Try: Data Scientist, Product Manager, Software Engineer, UX Designer</div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn" id="analyzeBtn">Survey My Skills →</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen" id="screen-skillmap">
+    <div class="eyebrow">Step 02 - Site Survey</div>
+    <h1 class="screen-title">Skill gap analysis</h1>
+    <p class="screen-sub" id="skillmapSub">Here's how your current profile measures up against the role you're targeting.</p>
+
+    <div class="legend">
+      <span><i style="background:var(--green)"></i>Already have</span>
+      <span><i style="background:var(--amber)"></i>Gap to close</span>
+    </div>
+
+    <div class="skill-list" id="skillList"></div>
+
+    <div class="btn-row">
+      <button class="btn secondary" data-goto="intake">← Back</button>
+      <button class="btn" id="buildRoadmapBtn">Draft My Roadmap →</button>
+    </div>
+  </section>
+
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

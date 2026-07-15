@@ -1,4 +1,19 @@
 
+const API_BASE = "http://localhost:3001";
+
+async function apiPost(path, body) {
+  const res = await fetch(API_BASE + path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.error || `Request failed (${res.status})`);
+  }
+  return res.json();
+}
+
 const CAREER_SKILLS = {
   "data scientist": ["python","sql","statistics","machine learning","data visualization","communication"],
   "product manager": ["roadmapping","stakeholder management","user research","data analysis","prioritization","communication"],
@@ -40,33 +55,6 @@ function normalizeCareer(input){
   return CAREER_SKILLS[key] ? key : "default";
 }
 
-function analyzeSkills(resumeText, careerKey){
-  const required = CAREER_SKILLS[careerKey];
-  const text = resumeText.toLowerCase();
-  return required.map(skill => {
-    const found = text.includes(skill.toLowerCase()) ||
-                  (skill === "machine learning" && text.includes("ml")) ||
-                  (skill === "data visualization" && (text.includes("tableau")||text.includes("dashboard")));
-    return { skill, level: found ? (60 + Math.floor(Math.random()*30)) : (5 + Math.floor(Math.random()*20)), have: found };
-  });
-}
-
-function buildRoadmap(skills){
-  const gaps = skills.filter(s => !s.have).map(s => s.skill);
-  const solid = skills.filter(s => s.have).map(s => s.skill);
-  const nodes = gaps.map(s => ({ type:"skill", skill:s, title:`Close the gap: ${cap(s)}` }));
-  if(nodes.length < 2 && solid.length){
-    nodes.push({type:"skill", skill:solid[0], title:`Deepen: ${cap(solid[0])}`});
-  }
-  nodes.push({ type:"interview", title:"Mock Interview Prep" });
-  nodes.push({ type:"capstone", title:"Capstone Project" });
-  return nodes.slice(0,6).map((n,i)=>({
-    ...n,
-    id:i,
-    status: i===0 ? "current" : "locked"
-  }));
-}
-
 function projectsFor(skill){
   const bank = {
     "python": [{t:"ETL mini-pipeline", d:"Pull a public dataset, clean it, and load it into a local SQLite DB with a Python script."}],
@@ -87,23 +75,6 @@ function projectsFor(skill){
   return [...p, {t:`${cap(skill)} teardown`, d:`Find a strong real-world example using ${skill} and write up what makes it work.`}];
 }
 
-function scoreAnswer(text){
-  const len = text.trim().split(/\s+/).filter(Boolean).length;
-  const hasResult = /result|outcome|impact|improved|reduced|increased/i.test(text);
-  const hasExample = /for example|when i|in my|at my|i worked|i built|i led/i.test(text);
-  let score = 4;
-  if(len > 25) score += 2;
-  if(len > 60) score += 1;
-  if(hasExample) score += 1.5;
-  if(hasResult) score += 1.5;
-  score = Math.min(10, Math.round(score*10)/10);
-  let note;
-  if(score >= 8) note = "Strong answer — concrete example and a clear result. Keep answers this tight.";
-  else if(score >= 6) note = "Solid structure. Add a specific, measurable result to make it land harder.";
-  else note = "Too thin for a panel interview. Use a real example and name the outcome (STAR format helps).";
-  return {score, note};
-}
-
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
 const state = {
@@ -113,7 +84,8 @@ const state = {
   skills: [],
   roadmap: [],
   selectedNode: null,
-  interviewAnswers: {},
+  interviewAnswers: {}, // index -> {score, note, text}
+  weeklyPlan: null,
 };
 
 const els = {
@@ -143,7 +115,19 @@ function showToast(msg){
   els.toast.textContent = msg;
   els.toast.classList.add('show');
   clearTimeout(showToast._t);
-  showToast._t = setTimeout(()=>els.toast.classList.remove('show'), 2400);
+  showToast._t = setTimeout(()=>els.toast.classList.remove('show'), 2800);
+}
+
+function setBtnLoading(btn, isLoading, loadingLabel){
+  if(!btn) return;
+  if(isLoading){
+    btn.dataset.originalLabel = btn.dataset.originalLabel || btn.textContent;
+    btn.textContent = loadingLabel;
+    btn.disabled = true;
+  } else {
+    btn.textContent = btn.dataset.originalLabel || btn.textContent;
+    btn.disabled = false;
+  }
 }
 
 function updateReadiness(){
@@ -162,6 +146,7 @@ function updateReadiness(){
   els.readinessPct.textContent = total + '%';
 }
 
+/* --- tag input --- */
 const tagBox = document.getElementById('tagBox');
 const interestsInput = document.getElementById('interestsInput');
 function renderTags(){
@@ -189,18 +174,33 @@ interestsInput.addEventListener('keydown', e=>{
 });
 renderTags();
 
-/* --- step 1: analyze --- */
-document.getElementById('analyzeBtn').addEventListener('click', ()=>{
+const analyzeBtn = document.getElementById('analyzeBtn');
+analyzeBtn.addEventListener('click', async ()=>{
   const resume = document.getElementById('resumeInput').value;
   const targetRaw = document.getElementById('targetInput').value || 'General role';
-  state.careerLabel = targetRaw;
-  state.careerKey = normalizeCareer(targetRaw);
-  state.skills = analyzeSkills(resume, state.careerKey);
 
-  renderSkillMap();
-  unlockStep('skillmap');
-  goto('skillmap');
-  updateReadiness();
+  if(!resume.trim()){
+    showToast('Paste your resume first.');
+    return;
+  }
+
+  setBtnLoading(analyzeBtn, true, 'Analyzing…');
+  try{
+    const result = await apiPost('/api/analyze-skills', { resume, careerLabel: targetRaw });
+    state.careerLabel = targetRaw;
+    state.careerKey = result.careerKey;
+    state.skills = result.skills;
+
+    renderSkillMap();
+    unlockStep('skillmap');
+    goto('skillmap');
+    updateReadiness();
+  } catch(err){
+    console.error(err);
+    showToast('Could not analyze resume — check the backend is running.');
+  } finally {
+    setBtnLoading(analyzeBtn, false);
+  }
 });
 
 function renderSkillMap(){
@@ -223,13 +223,22 @@ function renderSkillMap(){
   });
 }
 
-/* --- step 2 -> 3: build roadmap --- */
-document.getElementById('buildRoadmapBtn').addEventListener('click', ()=>{
-  state.roadmap = buildRoadmap(state.skills);
-  renderRoadmap();
-  unlockStep('roadmap');
-  goto('roadmap');
-  showToast('Roadmap drafted from your skill gaps.');
+/* --- step 2 -> 3: build roadmap (now calls the backend / Gemini) --- */
+const buildRoadmapBtn = document.getElementById('buildRoadmapBtn');
+buildRoadmapBtn.addEventListener('click', async ()=>{
+  setBtnLoading(buildRoadmapBtn, true, 'Drafting…');
+  try{
+    state.roadmap = await apiPost('/api/build-roadmap', { skills: state.skills, careerLabel: state.careerLabel });
+    renderRoadmap();
+    unlockStep('roadmap');
+    goto('roadmap');
+    showToast('Roadmap drafted from your skill gaps.');
+  } catch(err){
+    console.error(err);
+    showToast('Could not build roadmap — check the backend is running.');
+  } finally {
+    setBtnLoading(buildRoadmapBtn, false);
+  }
 });
 
 function renderRoadmap(){
@@ -301,13 +310,20 @@ function renderMilestonePanel(){
   const panel = document.getElementById('milestonePanel');
   if(!node){ panel.innerHTML = '<div class="empty-note">Select a waypoint above to see its brief.</div>'; return; }
 
-  const desc = node.type === 'skill'
-    ? `Focused sprint to build real, demonstrable proficiency in ${node.skill}. Ship the projects below, then mark this complete to update your skill map.`
+  const desc = node.why
+    ? node.why
+    : node.type === 'skill'
+    ? `Focused sprint to build real, demonstrable proficiency in ${node.skill}.`
     : node.type === 'interview'
     ? `Prep block before your mock interview. Review common questions for ${state.careerLabel || cap(state.careerKey)} and rehearse out loud.`
     : `A capstone that ties your closed gaps together into one portfolio-ready piece.`;
 
-  const projects = node.type === 'skill' ? projectsFor(node.skill) : projectsFor(state.careerKey === 'default' ? 'communication' : CAREER_SKILLS[state.careerKey][0]);
+  const projects = node.type === 'skill'
+    ? projectsFor(node.skill)
+    : projectsFor(state.careerKey === 'default' ? 'communication' : CAREER_SKILLS[state.careerKey][0]);
+
+  const isSkillNode = node.type === 'skill';
+  const isCurrent = node.status === 'current';
 
   panel.innerHTML = `
     <div class="mp-head">
@@ -323,29 +339,78 @@ function renderMilestonePanel(){
           <div class="ph">Recommended project</div>
         </div>`).join('')}
     </div>
-    <div class="btn-row" style="justify-content:flex-start">
-      <button class="btn" id="completeBtn" ${node.status!=='current'?'disabled':''}>Mark Waypoint Complete</button>
-    </div>
+    ${isSkillNode ? `
+      <div class="field">
+        <label>Submit your work for AI review</label>
+        <textarea id="submissionText" placeholder="Paste a link, code snippet, or a description of what you built..." ${isCurrent ? '' : 'disabled'}></textarea>
+      </div>
+      <div class="btn-row" style="justify-content:flex-start">
+        <button class="btn" id="completeBtn" ${!isCurrent ? 'disabled' : ''}>Submit for Review</button>
+      </div>
+      <div id="evalFeedback"></div>
+    ` : `
+      <div class="btn-row" style="justify-content:flex-start">
+        <button class="btn" id="completeBtn" ${!isCurrent ? 'disabled' : ''}>Mark Waypoint Complete</button>
+      </div>
+    `}
   `;
 
   const completeBtn = document.getElementById('completeBtn');
-  if(completeBtn){
-    completeBtn.addEventListener('click', ()=>{
-      node.status = 'done';
-      const idx = state.roadmap.findIndex(n=>n.id===node.id);
-      const next = state.roadmap[idx+1];
-      if(next) next.status = 'current';
+  if(!completeBtn) return;
 
-      if(node.type === 'skill'){
-        const s = state.skills.find(x=>x.skill===node.skill);
-        if(s){ s.level = Math.min(100, s.level + 35); s.have = s.level >= 55; renderSkillMap(); }
+  completeBtn.addEventListener('click', async ()=>{
+    if(isSkillNode){
+      const submission = document.getElementById('submissionText').value;
+      if(!submission.trim()){ showToast('Describe or paste your work first.'); return; }
+
+      setBtnLoading(completeBtn, true, 'Evaluating…');
+      try{
+        const evalResult = await apiPost('/api/evaluate-project', {
+          waypointTitle: node.title,
+          skill: node.skill,
+          submission,
+        });
+
+        const fbBox = document.getElementById('evalFeedback');
+        fbBox.innerHTML = `
+          <div class="feedback-box">
+            <span class="fb-score">Score: ${evalResult.score}/100 — ${evalResult.pass ? 'PASS' : 'NOT YET'}</span>
+            ${evalResult.feedback}
+          </div>
+        `;
+
+        if(evalResult.pass){
+          completeWaypoint(node, evalResult.levelGain);
+          showToast(`Waypoint passed — "${node.title}" marked complete.`);
+        } else {
+          showToast('Not quite there — see feedback and try again.');
+        }
+      } catch(err){
+        console.error(err);
+        showToast('Could not evaluate submission — check the backend is running.');
+      } finally {
+        setBtnLoading(completeBtn, false);
       }
-      renderRoadmap();
-      renderMilestonePanel();
-      updateReadiness();
-      showToast(`Roadmap updated - "${node.title}" marked complete.`);
-    });
+    } else {
+      completeWaypoint(node, 0);
+      showToast(`Roadmap updated — "${node.title}" marked complete.`);
+    }
+  });
+}
+
+function completeWaypoint(node, levelGain){
+  node.status = 'done';
+  const idx = state.roadmap.findIndex(n=>n.id===node.id);
+  const next = state.roadmap[idx+1];
+  if(next) next.status = 'current';
+
+  if(node.type === 'skill' && levelGain){
+    const s = state.skills.find(x=>x.skill===node.skill);
+    if(s){ s.level = Math.min(100, s.level + levelGain); s.have = s.level >= 55; renderSkillMap(); }
   }
+  renderRoadmap();
+  renderMilestonePanel();
+  updateReadiness();
 }
 
 document.getElementById('toInterviewBtn').addEventListener('click', ()=>{
@@ -371,6 +436,7 @@ function renderInterview(){
     item.addEventListener('click', ()=>renderAnswerArea(i, q));
     list.appendChild(item);
   });
+  renderWeeklyPlanSection();
 }
 
 function renderAnswerArea(i, q){
@@ -379,7 +445,7 @@ function renderAnswerArea(i, q){
   area.innerHTML = `
     <div class="card">
       <div class="field">
-        <label>${q.cat} - Your answer</label>
+        <label>${q.cat} — Your answer</label>
         <textarea id="answerText" placeholder="Answer as you would in the room...">${prior ? prior.text || '' : ''}</textarea>
       </div>
       <div class="btn-row">
@@ -390,16 +456,31 @@ function renderAnswerArea(i, q){
   `;
   if(prior){ renderFeedback(prior); }
 
-  document.getElementById('submitAnswerBtn').addEventListener('click', ()=>{
+  const submitAnswerBtn = document.getElementById('submitAnswerBtn');
+  submitAnswerBtn.addEventListener('click', async ()=>{
     const text = document.getElementById('answerText').value;
     if(!text.trim()){ showToast('Write an answer first.'); return; }
-    const result = scoreAnswer(text);
-    result.text = text;
-    state.interviewAnswers[i] = result;
-    renderFeedback(result);
-    renderInterview();
-    updateReadiness();
-    showToast('Feedback logged — readiness score updated.');
+
+    setBtnLoading(submitAnswerBtn, true, 'Scoring…');
+    try{
+      const result = await apiPost('/api/score-answer', {
+        question: q.q,
+        category: q.cat,
+        answer: text,
+        careerLabel: state.careerLabel || cap(state.careerKey),
+      });
+      result.text = text;
+      state.interviewAnswers[i] = result;
+      renderFeedback(result);
+      renderInterview();
+      updateReadiness();
+      showToast('Feedback logged — readiness score updated.');
+    } catch(err){
+      console.error(err);
+      showToast('Could not score answer — check the backend is running.');
+    } finally {
+      setBtnLoading(submitAnswerBtn, false);
+    }
   });
 }
 
@@ -410,6 +491,58 @@ function renderFeedback(result){
       ${result.note}
     </div>
   `;
+}
+
+function renderWeeklyPlanSection(){
+  const list = document.getElementById('qList');
+  const existing = document.getElementById('weeklyPlanSection');
+  if(existing) existing.remove();
+
+  const section = document.createElement('div');
+  section.id = 'weeklyPlanSection';
+  section.style.marginTop = '10px';
+  section.innerHTML = `
+    <div class="btn-row" style="justify-content:flex-start">
+      <button class="btn secondary" id="weeklyPlanBtn">Generate Next Week's Plan →</button>
+    </div>
+    <div id="weeklyPlanCard"></div>
+  `;
+  list.parentNode.insertBefore(section, list.nextSibling);
+
+  document.getElementById('weeklyPlanBtn').addEventListener('click', async (e)=>{
+    const btn = e.currentTarget;
+    setBtnLoading(btn, true, 'Planning…');
+    try{
+      const plan = await apiPost('/api/next-week-plan', {
+        careerLabel: state.careerLabel || cap(state.careerKey),
+        skills: state.skills,
+        roadmap: state.roadmap,
+        interviewAnswers: state.interviewAnswers,
+      });
+      state.weeklyPlan = plan;
+      document.getElementById('weeklyPlanCard').innerHTML = `
+        <div class="card" style="margin-top:14px">
+          <div class="mp-title" style="margin-bottom:8px">This Week</div>
+          <p class="mp-desc" style="margin:0 0 14px">${plan.summary}</p>
+          <div class="field">
+            <label>Focus areas</label>
+            <div>${plan.focus.map(f=>`<span class="tag-chip" style="margin:0 6px 6px 0;display:inline-flex">${f}</span>`).join('')}</div>
+          </div>
+          <div class="field" style="margin-bottom:0">
+            <label>Tasks</label>
+            <ul style="margin:0;padding-left:18px;color:rgba(244,247,250,0.85);font-size:13.5px;line-height:1.7">
+              ${plan.tasks.map(t=>`<li>${t}</li>`).join('')}
+            </ul>
+          </div>
+        </div>
+      `;
+    } catch(err){
+      console.error(err);
+      showToast('Could not generate plan — check the backend is running.');
+    } finally {
+      setBtnLoading(btn, false);
+    }
+  });
 }
 
 document.querySelectorAll('[data-goto]').forEach(btn=>{

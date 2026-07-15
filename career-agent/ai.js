@@ -3,7 +3,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
 const CAREER_SKILLS = {
   "data scientist": ["python", "sql", "statistics", "machine learning", "data visualization", "communication"],

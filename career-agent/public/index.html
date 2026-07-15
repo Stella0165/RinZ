@@ -83,11 +83,43 @@
       <button class="btn secondary" data-goto="intake">← Back</button>
       <button class="btn" id="buildRoadmapBtn">Draft My Roadmap →</button>
     </div>
+   </section>
+ 
+  <section class="screen" id="screen-roadmap">
+    <div class="eyebrow">Step 03 — Route Plan</div>
+    <h1 class="screen-title">Your roadmap</h1>
+    <p class="screen-sub">Each waypoint closes one gap. Complete a milestone to unlock the next and watch your readiness score move.</p>
+ 
+    <div class="roadmap-wrap">
+      <svg class="roadmap-svg" id="roadmapSvg" viewBox="0 0 900 220" width="100%" height="220"></svg>
+    </div>
+ 
+    <div class="milestone-panel" id="milestonePanel">
+      <div class="empty-note">Select a waypoint above to see its brief.</div>
+    </div>
+ 
+    <div class="btn-row">
+      <button class="btn secondary" data-goto="skillmap">← Back</button>
+      <button class="btn" id="toInterviewBtn">Continue to Mock Interview →</button>
+    </div>
   </section>
-
-
+ 
+  <section class="screen" id="screen-interview">
+    <div class="eyebrow">Step 04 — Field Test</div>
+    <h1 class="screen-title">Mock interview simulation</h1>
+    <p class="screen-sub" id="interviewSub">Answer a few questions pulled for your target role. I'll give quick feedback and fold your performance into your readiness score.</p>
+ 
+    <div class="q-list" id="qList"></div>
+    <div id="answerArea"></div>
+ 
+    <div class="btn-row">
+      <button class="btn secondary" data-goto="roadmap">← Back</button>
+    </div>
+  </section>
+ 
+</div>
+ 
 <div class="toast" id="toast"></div>
-
+ 
 <script src="app.js"></script>
 </body>
-</html>

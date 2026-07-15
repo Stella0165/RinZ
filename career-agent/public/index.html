@@ -67,26 +67,30 @@
     </div>
   </section>
 
-  <section class="screen" id="screen-skillmap">
+   <section class="screen" id="screen-skillmap">
     <div class="eyebrow">Step 02 - Site Survey</div>
     <h1 class="screen-title">Skill gap analysis</h1>
-    <p class="screen-sub" id="skillmapSub">Here's how your current potential measures up against the role you're targeting.</p>
-
-    <div class="legend">
-      <span><i style="background:var(--green)"></i>Already have</span>
-      <span><i style="background:var(--amber)"></i>Gap to close</span>
+    <p class="screen-sub" id="skillmapSub">Here's how your current profile measures up against the role you're targeting.</p>
+ 
+    <div class="survey-panel">
+      <div class="survey-chart-wrap">
+        <svg class="survey-chart" id="skillChart" viewBox="0 0 900 300" width="100%" height="300"></svg>
+        <div class="survey-legend">
+          <span><i class="dot have"></i>Above target</span>
+          <span><i class="dot gap"></i>Gap to close</span>
+        </div>
+      </div>
+      <div class="survey-stamp" id="surveyStamp"></div>
     </div>
-
-    <div class="skill-list" id="skillList"></div>
-
+ 
     <div class="btn-row">
       <button class="btn secondary" data-goto="intake">← Back</button>
       <button class="btn" id="buildRoadmapBtn">Draft My Roadmap →</button>
     </div>
-   </section>
+  </section>
  
   <section class="screen" id="screen-roadmap">
-    <div class="eyebrow">Step 03 — Route Plan</div>
+    <div class="eyebrow">Step 03 - Route Plan</div>
     <h1 class="screen-title">Your roadmap</h1>
     <p class="screen-sub">Each waypoint closes one gap. Complete a milestone to unlock the next and watch your readiness score move.</p>
  

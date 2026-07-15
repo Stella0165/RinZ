@@ -1,4 +1,3 @@
-
 const API_BASE = "http://localhost:3001";
 
 async function apiPost(path, body) {
@@ -118,6 +117,7 @@ function showToast(msg){
   showToast._t = setTimeout(()=>els.toast.classList.remove('show'), 2800);
 }
 
+// Toggles a button between its normal label and a loading label + disabled state.
 function setBtnLoading(btn, isLoading, loadingLabel){
   if(!btn) return;
   if(isLoading){
@@ -206,27 +206,65 @@ analyzeBtn.addEventListener('click', async ()=>{
 function renderSkillMap(){
   document.getElementById('skillmapSub').textContent =
     `Target: ${state.careerLabel || cap(state.careerKey)}. ${state.skills.filter(s=>!s.have).length} of ${state.skills.length} core skills still need work.`;
-  const list = document.getElementById('skillList');
-  list.innerHTML = '';
-  state.skills.forEach(s=>{
-    const row = document.createElement('div');
-    row.className = 'skill-row';
-    row.innerHTML = `
-      <div class="skill-name">${cap(s.skill)}</div>
-      <div class="skill-track"><div class="skill-fill ${s.have?'have':'gap'}" style="width:0%"></div></div>
-      <div class="skill-pct">${s.level}%</div>
-    `;
-    list.appendChild(row);
-    requestAnimationFrame(()=>{
-      row.querySelector('.skill-fill').style.width = s.level + '%';
-    });
+
+  const svg = document.getElementById('skillChart');
+  const skills = state.skills;
+  const w = 900, chartTop = 40, chartBottom = 230, padX = 60;
+  const chartH = chartBottom - chartTop;
+  const n = skills.length;
+  const usableW = w - padX * 2;
+  const stepX = n > 1 ? usableW / (n - 1) : 0;
+  const yFor = (level) => chartBottom - (level / 100) * chartH;
+
+  let gridSvg = '';
+  [0, 25, 50, 75, 100].forEach(t => {
+    const y = yFor(t);
+    gridSvg += `<line x1="${padX-10}" y1="${y}" x2="${w-padX+10}" y2="${y}" class="survey-grid-line"/>`;
+    gridSvg += `<text x="${padX-18}" y="${y+4}" class="survey-tick-label" text-anchor="end">${t}</text>`;
   });
+
+  const targetY = yFor(55);
+  const targetLine = `<line x1="${padX-10}" y1="${targetY}" x2="${w-padX+10}" y2="${targetY}" class="survey-target-line"/>
+    <text x="${w-padX+14}" y="${targetY+4}" class="survey-target-label">TARGET</text>`;
+
+  const baseline = `<line x1="${padX-10}" y1="${chartBottom}" x2="${w-padX+10}" y2="${chartBottom}" class="survey-baseline"/>`;
+
+  let stemsSvg = '';
+  skills.forEach((s, i) => {
+    const x = n > 1 ? padX + stepX * i : w / 2;
+    const y = yFor(s.level);
+    const cls = s.have ? 'have' : 'gap';
+    const label = wrapLabel(cap(s.skill), 12);
+    stemsSvg += `
+      <g class="survey-stem ${cls}">
+        <line x1="${x}" y1="${chartBottom}" x2="${x}" y2="${y}" class="stem-line"/>
+        <circle cx="${x}" cy="${y}" r="14" class="stem-cap"/>
+        <text x="${x}" y="${y+4}" class="stem-pct">${s.level}</text>
+        ${label.map((line, li) => `<text x="${x}" y="${chartBottom + 22 + li*13}" class="stem-label">${line}</text>`).join('')}
+      </g>`;
+  });
+
+  svg.innerHTML = gridSvg + baseline + targetLine + stemsSvg;
+
+  const haveCount = skills.filter(s => s.have).length;
+  document.getElementById('surveyStamp').innerHTML = `
+    <svg viewBox="0 0 60 60" width="48" height="48" style="display:block">
+      <circle cx="30" cy="30" r="26" stroke="var(--blueprint)" stroke-width="1.2" stroke-dasharray="2 3" fill="none"/>
+      <circle cx="30" cy="30" r="15" stroke="var(--amber)" stroke-width="1.4" fill="none"/>
+      <path d="M30 4 V12 M30 48 V56 M4 30 H12 M48 30 H56" stroke="var(--blueprint)" stroke-width="1.2"/>
+      <circle cx="30" cy="30" r="3" fill="var(--amber)"/>
+    </svg>
+    <div>
+      <div class="stamp-title">SURVEY<br/>COMPLETE</div>
+      <div class="stamp-fraction">${haveCount}/${skills.length}</div>
+      <div class="stamp-caption">above target</div>
+    </div>
+  `;
 }
 
-/* --- step 2 -> 3: build roadmap (now calls the backend / Gemini) --- */
 const buildRoadmapBtn = document.getElementById('buildRoadmapBtn');
 buildRoadmapBtn.addEventListener('click', async ()=>{
-  setBtnLoading(buildRoadmapBtn, true, 'Drafting…');
+  setBtnLoading(buildRoadmapBtn, true, 'Drafting...');
   try{
     state.roadmap = await apiPost('/api/build-roadmap', { skills: state.skills, careerLabel: state.careerLabel });
     renderRoadmap();
@@ -363,7 +401,7 @@ function renderMilestonePanel(){
       const submission = document.getElementById('submissionText').value;
       if(!submission.trim()){ showToast('Describe or paste your work first.'); return; }
 
-      setBtnLoading(completeBtn, true, 'Evaluating…');
+      setBtnLoading(completeBtn, true, 'Evaluating...');
       try{
         const evalResult = await apiPost('/api/evaluate-project', {
           waypointTitle: node.title,
@@ -381,19 +419,19 @@ function renderMilestonePanel(){
 
         if(evalResult.pass){
           completeWaypoint(node, evalResult.levelGain);
-          showToast(`Waypoint passed — "${node.title}" marked complete.`);
+          showToast(`Waypoint passed - "${node.title}" marked complete.`);
         } else {
-          showToast('Not quite there — see feedback and try again.');
+          showToast('Not quite there - see feedback and try again.');
         }
       } catch(err){
         console.error(err);
-        showToast('Could not evaluate submission — check the backend is running.');
+        showToast('Could not evaluate submission - check the backend is running.');
       } finally {
         setBtnLoading(completeBtn, false);
       }
     } else {
       completeWaypoint(node, 0);
-      showToast(`Roadmap updated — "${node.title}" marked complete.`);
+      showToast(`Roadmap updated - "${node.title}" marked complete.`);
     }
   });
 }
@@ -445,7 +483,7 @@ function renderAnswerArea(i, q){
   area.innerHTML = `
     <div class="card">
       <div class="field">
-        <label>${q.cat} — Your answer</label>
+        <label>${q.cat} - Your answer</label>
         <textarea id="answerText" placeholder="Answer as you would in the room...">${prior ? prior.text || '' : ''}</textarea>
       </div>
       <div class="btn-row">
@@ -474,7 +512,7 @@ function renderAnswerArea(i, q){
       renderFeedback(result);
       renderInterview();
       updateReadiness();
-      showToast('Feedback logged — readiness score updated.');
+      showToast('Feedback logged - readiness score updated.');
     } catch(err){
       console.error(err);
       showToast('Could not score answer — check the backend is running.');
@@ -538,7 +576,7 @@ function renderWeeklyPlanSection(){
       `;
     } catch(err){
       console.error(err);
-      showToast('Could not generate plan — check the backend is running.');
+      showToast('Could not generate plan - check the backend is running.');
     } finally {
       setBtnLoading(btn, false);
     }

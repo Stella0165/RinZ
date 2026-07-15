@@ -46,18 +46,81 @@ function normalizeCareer(input) {
   return CAREER_SKILLS[key] ? key : "default";
 }
 
+const skillsSchema = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      skill: { type: "string" },
+      level: { type: "number" },
+      have: { type: "boolean" },
+      evidence: { type: "string" },
+    },
+    required: ["skill", "level", "have", "evidence"],
+  },
+};
+
+const roadmapSchema = {
+  type: "array",
+  items: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: ["skill", "interview", "capstone"] },
+      skill: { type: "string" },
+      title: { type: "string" },
+      why: { type: "string" },
+    },
+    required: ["type", "title", "why"],
+  },
+};
+
+const evaluateSchema = {
+  type: "object",
+  properties: {
+    pass: { type: "boolean" },
+    score: { type: "number" },
+    feedback: { type: "string" },
+    levelGain: { type: "number" },
+  },
+  required: ["pass", "score", "feedback", "levelGain"],
+};
+
+const scoreAnswerSchema = {
+  type: "object",
+  properties: {
+    score: { type: "number" },
+    note: { type: "string" },
+  },
+  required: ["score", "note"],
+};
+
+const weeklyPlanSchema = {
+  type: "object",
+  properties: {
+    summary: { type: "string" },
+    focus: { type: "array", items: { type: "string" } },
+    tasks: { type: "array", items: { type: "string" } },
+  },
+  required: ["summary", "focus", "tasks"],
+};
+
 function parseJSON(text) {
-  const cleaned = text.replace(/```json|```/g, "").trim();
-  return JSON.parse(cleaned);
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("Gemini returned invalid JSON. Raw text was:\n", text);
+    throw new Error("The AI response could not be parsed. Please try again.");
+  }
 }
 
-async function callGemini(systemInstruction, userMessage) {
+async function callGemini(systemInstruction, userMessage, responseSchema) {
   const response = await ai.models.generateContent({
     model: MODEL,
     contents: userMessage,
     config: {
       systemInstruction,
       responseMimeType: "application/json",
+      responseSchema,
     },
   });
   return response.text;
@@ -69,9 +132,8 @@ export async function analyzeResumeSkills(resumeText, careerInput) {
 
   const system = `You are a technical recruiter assessing a resume against a fixed skill list for a target role.
 For each skill in the list, judge the candidate's real, demonstrated proficiency based ONLY on the resume text.
-Return a JSON array of objects:
-[{ "skill": string, "level": number (0-100), "have": boolean, "evidence": string (max 15 words, quote nothing, just summarize) }]
-"have" should be true only if level >= 55. Be honest — do not inflate scores for skills only vaguely implied.`;
+"have" should be true only if level >= 55. Be honest — do not inflate scores for skills only vaguely implied.
+"evidence" should summarize why in max 15 words, quoting nothing directly.`;
 
   const userMessage = `Target role: ${careerInput || careerKey}
 Required skills: ${required.join(", ")}
@@ -81,7 +143,7 @@ Resume:
 ${resumeText || "(empty resume)"}
 """`;
 
-  const raw = await callGemini(system, userMessage);
+  const raw = await callGemini(system, userMessage, skillsSchema);
   const parsed = parseJSON(raw);
   return { careerKey, skills: parsed };
 }
@@ -93,14 +155,14 @@ export async function generateRoadmap(skills, careerInput) {
   const system = `You are a career coach building a learning roadmap. Given skill gaps (and any skills already solid),
 produce an ORDERED list of 4-6 waypoints prioritizing skills that unlock the most other skills or have the
 highest hiring impact first. Always end with an "interview" waypoint and a "capstone" waypoint.
-Return a JSON array:
-[{ "type": "skill" | "interview" | "capstone", "skill": string | null, "title": string (short, action-oriented), "why": string (max 20 words, reasoning for this priority) }]`;
+For "interview" and "capstone" types, leave "skill" as an empty string. Keep "title" short and action-oriented,
+and "why" under 20 words explaining the priority reasoning.`;
 
   const userMessage = `Target role: ${careerInput}
 Skill gaps to close: ${gaps.join(", ") || "none — candidate is strong, focus on depth"}
 Skills already solid: ${solid.join(", ") || "none"}`;
 
-  const raw = await callGemini(system, userMessage);
+  const raw = await callGemini(system, userMessage, roadmapSchema);
   const parsed = parseJSON(raw);
   return parsed.map((n, i) => ({ ...n, id: i, status: i === 0 ? "current" : "locked" }));
 }
@@ -108,9 +170,7 @@ Skills already solid: ${solid.join(", ") || "none"}`;
 export async function evaluateProject(waypointTitle, skill, submissionText) {
   const system = `You are a strict but fair technical reviewer grading a learner's project submission against a
 target skill for a career roadmap. The submission may be a code snippet, a description of what they built, or a link
-description. Judge realistically — do not pass weak or vague submissions.
-Return JSON:
-{ "pass": boolean, "score": number (0-100), "feedback": string (2-3 sentences, specific and actionable), "levelGain": number (0-35, how much this should raise their skill level meter, 0 if it fails) }`;
+description. Judge realistically — do not pass weak or vague submissions. "levelGain" should be 0-35 (0 if it fails).`;
 
   const userMessage = `Waypoint: ${waypointTitle}
 Target skill: ${skill}
@@ -120,16 +180,15 @@ Learner's submission:
 ${submissionText || "(nothing submitted)"}
 """`;
 
-  const raw = await callGemini(system, userMessage);
+  const raw = await callGemini(system, userMessage, evaluateSchema);
   return parseJSON(raw);
 }
 
 export async function scoreInterviewAnswer(question, category, answer, careerInput) {
   const system = `You are an experienced interviewer for the role of ${careerInput}. Score the candidate's answer
 to an interview question the way a real panel would: reward concrete examples, measurable results, and structure
-(e.g. STAR format for behavioral questions). Penalize vague, generic, or overly short answers.
-Return JSON:
-{ "score": number (0-10, one decimal allowed), "note": string (2-3 sentences of direct, specific feedback) }`;
+(e.g. STAR format for behavioral questions). Penalize vague, generic, or overly short answers. Score is 0-10,
+one decimal allowed. "note" should be 2-3 sentences of direct, specific feedback.`;
 
   const userMessage = `Question category: ${category}
 Question: ${question}
@@ -139,22 +198,21 @@ Candidate's answer:
 ${answer || "(no answer given)"}
 """`;
 
-  const raw = await callGemini(system, userMessage);
+  const raw = await callGemini(system, userMessage, scoreAnswerSchema);
   return parseJSON(raw);
 }
 
 export async function generateNextWeekPlan(state) {
   const system = `You are a career coach writing a short weekly plan for a learner based on their current progress.
-Be specific and motivating but realistic about what's achievable in one week.
-Return JSON:
-{ "summary": string (2 sentences on where they stand), "focus": string[] (1-3 skill/topic names to prioritize this week), "tasks": string[] (3-5 concrete, doable tasks for the week) }`;
+Be specific and motivating but realistic about what's achievable in one week. "focus" should list 1-3 skill/topic
+names to prioritize. "tasks" should list 3-5 concrete, doable tasks for the week.`;
 
   const userMessage = `Target role: ${state.careerLabel}
 Skill levels: ${JSON.stringify(state.skills)}
 Roadmap status: ${JSON.stringify(state.roadmap?.map((n) => ({ title: n.title, status: n.status })))}
 Recent interview scores: ${JSON.stringify(Object.values(state.interviewAnswers || {}).map((a) => a.score))}`;
 
-  const raw = await callGemini(system, userMessage);
+  const raw = await callGemini(system, userMessage, weeklyPlanSchema);
   return parseJSON(raw);
 }
 

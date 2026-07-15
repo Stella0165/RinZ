@@ -1,3 +1,6 @@
+/* ---------------------------------------------------------
+   CONFIG
+--------------------------------------------------------- */
 const API_BASE = "http://localhost:3001";
 
 async function apiPost(path, body) {
@@ -13,6 +16,11 @@ async function apiPost(path, body) {
   return res.json();
 }
 
+/* ---------------------------------------------------------
+   STATIC LOOKUPS
+   (Kept client-side for instant rendering — the backend has
+   its own copies used only for grading/reasoning context.)
+--------------------------------------------------------- */
 const CAREER_SKILLS = {
   "data scientist": ["python","sql","statistics","machine learning","data visualization","communication"],
   "product manager": ["roadmapping","stakeholder management","user research","data analysis","prioritization","communication"],
@@ -76,6 +84,9 @@ function projectsFor(skill){
 
 function cap(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
+/* ---------------------------------------------------------
+   APP STATE + UI WIRING
+--------------------------------------------------------- */
 const state = {
   interests: [],
   careerKey: "default",
@@ -174,6 +185,7 @@ interestsInput.addEventListener('keydown', e=>{
 });
 renderTags();
 
+/* --- step 1: analyze (now calls the backend / Gemini) --- */
 const analyzeBtn = document.getElementById('analyzeBtn');
 analyzeBtn.addEventListener('click', async ()=>{
   const resume = document.getElementById('resumeInput').value;
@@ -207,12 +219,21 @@ function renderSkillMap(){
   document.getElementById('skillmapSub').textContent =
     `Target: ${state.careerLabel || cap(state.careerKey)}. ${state.skills.filter(s=>!s.have).length} of ${state.skills.length} core skills still need work.`;
 
-  const svg = document.getElementById('skillChart');
   const skills = state.skills;
-  const w = 900, chartTop = 40, chartBottom = 230, padX = 60;
+  const gapSkills = skills.filter(s => !s.have);
+  const gapsEl = document.getElementById('surveyGaps');
+  gapsEl.innerHTML = gapSkills.length
+    ? `<span class="sg-label">Gaps to close:</span>` + gapSkills.map(s => `<span class="gap-chip">${cap(s.skill)}</span>`).join('')
+    : `<span class="sg-label">Gaps to close:</span><span class="gap-chip none">None — all skills above target</span>`;
+
+  const svg = document.getElementById('skillChart');
+  const w = 900, chartTop = 50, chartBottom = 280, padX = 70;
   const chartH = chartBottom - chartTop;
   const n = skills.length;
-  const usableW = w - padX * 2;
+  const usableWFull = w - padX * 2;
+  const maxStep = 130; // cap spacing so a handful of skills cluster centered, not stretch edge-to-edge
+  const usableW = Math.min(usableWFull, (n - 1) * maxStep);
+  const offsetX = padX + (usableWFull - usableW) / 2;
   const stepX = n > 1 ? usableW / (n - 1) : 0;
   const yFor = (level) => chartBottom - (level / 100) * chartH;
 
@@ -231,16 +252,16 @@ function renderSkillMap(){
 
   let stemsSvg = '';
   skills.forEach((s, i) => {
-    const x = n > 1 ? padX + stepX * i : w / 2;
+    const x = n > 1 ? offsetX + stepX * i : w / 2;
     const y = yFor(s.level);
     const cls = s.have ? 'have' : 'gap';
     const label = wrapLabel(cap(s.skill), 12);
     stemsSvg += `
       <g class="survey-stem ${cls}">
         <line x1="${x}" y1="${chartBottom}" x2="${x}" y2="${y}" class="stem-line"/>
-        <circle cx="${x}" cy="${y}" r="14" class="stem-cap"/>
+        <circle cx="${x}" cy="${y}" r="17" class="stem-cap"/>
         <text x="${x}" y="${y+4}" class="stem-pct">${s.level}</text>
-        ${label.map((line, li) => `<text x="${x}" y="${chartBottom + 22 + li*13}" class="stem-label">${line}</text>`).join('')}
+        ${label.map((line, li) => `<text x="${x}" y="${chartBottom + 26 + li*15}" class="stem-label">${line}</text>`).join('')}
       </g>`;
   });
 
@@ -262,9 +283,10 @@ function renderSkillMap(){
   `;
 }
 
+/* --- step 2 -> 3: build roadmap (now calls the backend / Gemini) --- */
 const buildRoadmapBtn = document.getElementById('buildRoadmapBtn');
 buildRoadmapBtn.addEventListener('click', async ()=>{
-  setBtnLoading(buildRoadmapBtn, true, 'Drafting...');
+  setBtnLoading(buildRoadmapBtn, true, 'Drafting…');
   try{
     state.roadmap = await apiPost('/api/build-roadmap', { skills: state.skills, careerLabel: state.careerLabel });
     renderRoadmap();
@@ -401,7 +423,7 @@ function renderMilestonePanel(){
       const submission = document.getElementById('submissionText').value;
       if(!submission.trim()){ showToast('Describe or paste your work first.'); return; }
 
-      setBtnLoading(completeBtn, true, 'Evaluating...');
+      setBtnLoading(completeBtn, true, 'Evaluating…');
       try{
         const evalResult = await apiPost('/api/evaluate-project', {
           waypointTitle: node.title,
@@ -419,19 +441,19 @@ function renderMilestonePanel(){
 
         if(evalResult.pass){
           completeWaypoint(node, evalResult.levelGain);
-          showToast(`Waypoint passed - "${node.title}" marked complete.`);
+          showToast(`Waypoint passed — "${node.title}" marked complete.`);
         } else {
-          showToast('Not quite there - see feedback and try again.');
+          showToast('Not quite there — see feedback and try again.');
         }
       } catch(err){
         console.error(err);
-        showToast('Could not evaluate submission - check the backend is running.');
+        showToast('Could not evaluate submission — check the backend is running.');
       } finally {
         setBtnLoading(completeBtn, false);
       }
     } else {
       completeWaypoint(node, 0);
-      showToast(`Roadmap updated - "${node.title}" marked complete.`);
+      showToast(`Roadmap updated — "${node.title}" marked complete.`);
     }
   });
 }
@@ -451,6 +473,7 @@ function completeWaypoint(node, levelGain){
   updateReadiness();
 }
 
+/* --- step 3 -> 4: interview --- */
 document.getElementById('toInterviewBtn').addEventListener('click', ()=>{
   renderInterview();
   unlockStep('interview');
@@ -483,7 +506,7 @@ function renderAnswerArea(i, q){
   area.innerHTML = `
     <div class="card">
       <div class="field">
-        <label>${q.cat} - Your answer</label>
+        <label>${q.cat} — Your answer</label>
         <textarea id="answerText" placeholder="Answer as you would in the room...">${prior ? prior.text || '' : ''}</textarea>
       </div>
       <div class="btn-row">
@@ -512,7 +535,7 @@ function renderAnswerArea(i, q){
       renderFeedback(result);
       renderInterview();
       updateReadiness();
-      showToast('Feedback logged - readiness score updated.');
+      showToast('Feedback logged — readiness score updated.');
     } catch(err){
       console.error(err);
       showToast('Could not score answer — check the backend is running.');
@@ -531,6 +554,7 @@ function renderFeedback(result){
   `;
 }
 
+/* --- weekly plan generator (agentic feedback-loop step) --- */
 function renderWeeklyPlanSection(){
   const list = document.getElementById('qList');
   const existing = document.getElementById('weeklyPlanSection');
@@ -583,6 +607,7 @@ function renderWeeklyPlanSection(){
   });
 }
 
+/* --- nav: back buttons + locked step guard --- */
 document.querySelectorAll('[data-goto]').forEach(btn=>{
   btn.addEventListener('click', ()=>goto(btn.dataset.goto));
 });
